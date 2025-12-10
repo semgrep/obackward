@@ -5,6 +5,9 @@
 
 (license "LGPL-2.1-or-later WITH OCaml-LGPL-linking-exception")
 
+(maintainers "Semgrep authors")
+(authors "Semgrep authors")
+
 (package
   (name obackward)
   (synopsis "Bindings to backward-cpp")
