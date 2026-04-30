@@ -22,8 +22,13 @@ let contains s sub =
   loop 0
 
 (* Spawn the crash_helper executable in [mode], capture its stderr, and return
-   the wait status and captured output. *)
-let run_helper mode =
+   the wait status, captured output, and whether a watchdog had to SIGKILL the
+   helper. The watchdog matters because backward-cpp's signal handler is
+   supposed to re-raise the original signal after printing, but on some
+   environments (observed on GitHub macOS runners) the helper prints the trace
+   and then hangs, which would otherwise deadlock [Unix.read] / [Unix.waitpid]
+   forever. *)
+let run_helper ?(timeout_seconds = 15) mode =
   let helper =
     Filename.concat (Filename.dirname Sys.executable_name) "crash_helper.exe"
   in
@@ -36,30 +41,37 @@ let run_helper mode =
   in
   Unix.close stderr_w;
   Unix.close devnull;
+  let killed_by_watchdog = ref false in
+  let prev_handler =
+    Sys.signal Sys.sigalrm
+      (Sys.Signal_handle
+         (fun _ ->
+           killed_by_watchdog := true;
+           try Unix.kill pid Sys.sigkill with _ -> ()))
+  in
+  ignore (Unix.alarm timeout_seconds);
   let captured = read_all_from_fd stderr_r in
   Unix.close stderr_r;
+  ignore (Unix.alarm 0);
+  Sys.set_signal Sys.sigalrm prev_handler;
   let _, status = Unix.waitpid [] pid in
-  (status, captured)
+  (status, captured, !killed_by_watchdog)
 
 let assert_died_with_trace ~mode =
-  let status, captured = run_helper mode in
-  (match status with
-  | Unix.WSIGNALED _ -> ()
-  | Unix.WEXITED code ->
-      Alcotest.failf
-        "helper (%s) exited normally with code %d (signal handler did not \
-         re-raise);\n\
-         captured stderr was:\n\
-         %s"
-        mode code captured
-  | Unix.WSTOPPED s ->
-      Alcotest.failf
-        "helper (%s) stopped with signal %d; captured stderr was:\n%s" mode s
-        captured);
+  let status, captured, killed_by_watchdog = run_helper mode in
   let needle = "Stack trace (most recent call last)" in
   if not (contains captured needle) then
     Alcotest.failf
-      "expected stderr (mode=%s) to contain %S; got:\n%s" mode needle captured
+      "expected stderr (mode=%s) to contain %S;\n\
+       status=%s, watchdog_killed=%b;\n\
+       got:\n\
+       %s"
+      mode needle
+      (match status with
+      | Unix.WSIGNALED s -> Printf.sprintf "WSIGNALED %d" s
+      | Unix.WEXITED c -> Printf.sprintf "WEXITED %d" c
+      | Unix.WSTOPPED s -> Printf.sprintf "WSTOPPED %d" s)
+      killed_by_watchdog captured
 
 let test_register_returns_ok () =
   match Backward.register () with

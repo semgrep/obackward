@@ -15,6 +15,7 @@ jobs:
         # macos-latest = aarch64 darwin (Apple Silicon).
         os: [ubuntu-latest, ubuntu-24.04-arm, macos-latest]
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -42,6 +43,7 @@ jobs:
     # Linux runners". arm64 musl coverage is therefore omitted; arm64 is
     # still tested via the main matrix (glibc) and macos-latest (darwin).
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     container:
       image: ocaml/opam:alpine-ocaml-5.3@sha256:d58182f2f8be08ecff74a4d5286c5987eaf55299f9b13db3a6178744209c6aae
       options: --user root
