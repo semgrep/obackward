@@ -19,5 +19,6 @@
     (conf-zstd (<> :os win32)) ; for libdwarf
     (conf-libdw (= :os linux))
     (conf-libbz2 (= :os linux)) ; for libdw
+    (alcotest :with-test)
   )
 )

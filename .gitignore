@@ -1,1 +1,14 @@
-_build
+.DS_Store
+.idea
+*.log
+tmp/
+
+# opam
+_opam/
+*.install
+
+# dune
+_build/
+
+# direnv
+.direnv/

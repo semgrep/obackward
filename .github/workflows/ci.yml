@@ -1,0 +1,74 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [develop]
+
+jobs:
+  build-and-test-nix:
+    name: build & test (${{ matrix.os }}, nix)
+    strategy:
+      fail-fast: false
+      matrix:
+        # ubuntu-latest = x86_64 glibc, ubuntu-24.04-arm = aarch64 glibc,
+        # macos-latest = aarch64 darwin (Apple Silicon).
+        os: [ubuntu-latest, ubuntu-24.04-arm, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@ab739621df7a23f52766f9ccc97f38da6b7af14f # v31.10.5
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      - name: Build
+        run: nix develop --no-pure-eval --command dune build
+
+      - name: Run tests
+        run: nix develop --no-pure-eval --command dune runtest
+
+  build-and-test-alpine:
+    name: build & test (alpine on ${{ matrix.runner }}, musl)
+    strategy:
+      fail-fast: false
+      matrix:
+        # The multi-arch image digest auto-resolves to the matching arch
+        # variant (amd64 on x86_64 hosts, arm64 on arm hosts).
+        runner: [ubuntu-latest, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.runner }}
+    container:
+      image: ocaml/opam:alpine-ocaml-5.3@sha256:d58182f2f8be08ecff74a4d5286c5987eaf55299f9b13db3a6178744209c6aae
+      options: --user root
+    env:
+      # The pre-built switch lives under the `opam` user's home; running as
+      # root means we have to point opam at it explicitly.
+      OPAMROOT: /home/opam/.opam
+    steps:
+      - name: Install Alpine system deps
+        run: |
+          apk add --no-cache \
+            build-base pkgconf bash git \
+            elfutils-dev \
+            libunwind-dev libunwind-static \
+            zstd-dev zstd-static \
+            bzip2-dev bzip2-static \
+            xz-dev xz-static
+
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Trust workspace as git
+        run: git config --global --add safe.directory '*'
+
+      - name: Install OCaml dependencies
+        run: opam install . --deps-only --with-test --yes
+
+      - name: Build
+        run: opam exec -- dune build
+
+      - name: Run tests
+        run: opam exec -- dune runtest

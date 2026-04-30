@@ -1,0 +1,14 @@
+; Tests for obackward.
+
+; Helper executable: registers the signal handler then crashes itself in one
+; of several modes (sigusr1, magic, ffi). The test_obackward runner spawns
+; this as a subprocess and inspects its stderr.
+(executable
+  (name crash_helper)
+  (libraries obackward unix)
+  (foreign_stubs (language c) (names crash_ffi_stubs)))
+
+(test
+  (name test_obackward)
+  (libraries obackward alcotest unix)
+  (deps crash_helper.exe))
