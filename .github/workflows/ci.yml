@@ -6,8 +6,8 @@ on:
     branches: [develop]
 
 jobs:
-  build-and-test-nix:
-    name: build & test (${{ matrix.os }}, nix)
+  build-and-test:
+    name: build & test (${{ matrix.os }})
     strategy:
       fail-fast: false
       matrix:
@@ -19,17 +19,19 @@ jobs:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-      - name: Install Nix
-        uses: cachix/install-nix-action@ab739621df7a23f52766f9ccc97f38da6b7af14f # v31.10.5
+      - name: Set up OCaml
+        uses: ocaml/setup-ocaml@e32b06a3e831ff2fbc6f08cf35be2085e3918014 # v3.6.1
         with:
-          extra_nix_config: |
-            experimental-features = nix-command flakes
+          ocaml-compiler: "5.3"
+
+      - name: Install dependencies
+        run: opam install . --deps-only --with-test --yes
 
       - name: Build
-        run: nix develop --no-pure-eval --command dune build
+        run: opam exec -- dune build
 
       - name: Run tests
-        run: nix develop --no-pure-eval --command dune runtest
+        run: opam exec -- dune runtest
 
   build-and-test-alpine:
     name: build & test (alpine, musl)
@@ -38,7 +40,7 @@ jobs:
     # ship an arm64-alpine node20 binary, so the runner aborts with
     # "JavaScript Actions in Alpine containers are only supported on x64
     # Linux runners". arm64 musl coverage is therefore omitted; arm64 is
-    # still tested via the nix matrix (glibc) and macos-latest (darwin).
+    # still tested via the main matrix (glibc) and macos-latest (darwin).
     runs-on: ubuntu-latest
     container:
       image: ocaml/opam:alpine-ocaml-5.3@sha256:d58182f2f8be08ecff74a4d5286c5987eaf55299f9b13db3a6178744209c6aae
