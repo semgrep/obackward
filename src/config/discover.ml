@@ -45,7 +45,11 @@ let () =
           { libs = [ "-lstdc++" ]; cflags = [ "-fPIC" ] }
         in
 
-        let conf_cpp_flags = [ "-std=c++11"; "-fPIC" ] in
+        (* `-x c++` is required so the nix clang wrapper on darwin injects the
+           libc++ search paths: dune invokes the compiler as `cc` (OCaml's
+           configured c_compiler), and the wrapper only enables C++ mode when
+           the binary name ends in `++` or `-x c++` is passed explicitly. *)
+        let conf_cpp_flags = [ "-x"; "c++"; "-std=c++11"; "-fPIC" ] in
         C.Flags.write_sexp "cpp_flags.sexp"
           (* nosemgrep: no-list-concat *)
           (List.flatten
