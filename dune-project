@@ -19,6 +19,7 @@
     (conf-zstd (<> :os win32)) ; for libdwarf
     (conf-libdw (= :os linux))
     (conf-libbz2 (= :os linux)) ; for libdw
+    (conf-dwarfutils (= :os macos)) ; libdwarf for symbolization; no libdw on macos
     (alcotest :with-test)
   )
 )
