@@ -57,10 +57,10 @@ jobs:
           apk add --no-cache \
             build-base pkgconf bash git \
             elfutils-dev \
-            libunwind-dev libunwind-static \
-            zstd-dev zstd-static \
-            bzip2-dev bzip2-static \
-            xz-dev xz-static
+            libunwind-dev \
+            zstd-dev \
+            bzip2-dev \
+            xz-dev
 
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
