@@ -4525,7 +4525,7 @@ class SignalHandling {
 
         prev_terminate_ = std::set_terminate(&terminator);
 #ifndef BACKWARD_ATLEAST_CXX17
-        std::set_unexpected(&terminator);
+        prev_unexpected_ = std::set_unexpected(&terminator);
 #endif
         prev_purecall_ = _set_purecall_handler(&terminator);
         prev_invalid_parameter_ =
@@ -4539,6 +4539,9 @@ class SignalHandling {
         SetUnhandledExceptionFilter(prev_filter_);
         signal(SIGABRT, prev_sigabrt_);
         std::set_terminate(prev_terminate_);
+#ifndef BACKWARD_ATLEAST_CXX17
+        std::set_unexpected(prev_unexpected_);
+#endif
         _set_purecall_handler(prev_purecall_);
         _set_invalid_parameter_handler(prev_invalid_parameter_);
 
@@ -4585,6 +4588,9 @@ class SignalHandling {
     LPTOP_LEVEL_EXCEPTION_FILTER prev_filter_ = nullptr;
     void (*prev_sigabrt_)(int) = nullptr;
     std::terminate_handler prev_terminate_ = nullptr;
+#ifndef BACKWARD_ATLEAST_CXX17
+    std::unexpected_handler prev_unexpected_ = nullptr;
+#endif
     _purecall_handler prev_purecall_ = nullptr;
     _invalid_parameter_handler prev_invalid_parameter_ = nullptr;
 
