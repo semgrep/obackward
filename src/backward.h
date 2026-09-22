@@ -4481,8 +4481,15 @@ class SignalHandling {
 
 class SignalHandling {
   public:
-    SignalHandling(const std::vector<int> & = std::vector<int>())
-        : reporter_thread_([]() {
+    SignalHandling(const std::vector<int> & = std::vector<int>()) {
+        // Initialize the function-local statics before starting the reporter.
+        // Otherwise the reporter may initialize them during exit(), and
+        // registering their destructors with atexit blocks on the CRT exit
+        // lock held by the exiting thread, which then deadlocks joining it.
+        mtx();
+        cv();
+
+        reporter_thread_ = std::thread([]() {
               /* We handle crashes in a utility thread:
                 backward structures and some Windows functions called here
                 need stack space, which we do not have when we encounter a
@@ -4504,7 +4511,8 @@ class SignalHandling {
                   crashed() = crash_status::ending;
               }
               cv().notify_one();
-          }) {
+          });
+
         prev_filter_ = SetUnhandledExceptionFilter(crash_handler);
 
         prev_sigabrt_ = signal(SIGABRT, signal_handler);
