@@ -4481,8 +4481,15 @@ class SignalHandling {
 
 class SignalHandling {
   public:
-    SignalHandling(const std::vector<int> & = std::vector<int>())
-        : reporter_thread_([]() {
+    SignalHandling(const std::vector<int> & = std::vector<int>()) {
+        // Initialize the function-local statics before starting the reporter.
+        // Otherwise the reporter may initialize them during exit(), and
+        // registering their destructors with atexit blocks on the CRT exit
+        // lock held by the exiting thread, which then deadlocks joining it.
+        mtx();
+        cv();
+
+        reporter_thread_ = std::thread([]() {
               /* We handle crashes in a utility thread:
                 backward structures and some Windows functions called here
                 need stack space, which we do not have when we encounter a
@@ -4504,10 +4511,11 @@ class SignalHandling {
                   crashed() = crash_status::ending;
               }
               cv().notify_one();
-          }) {
-        SetUnhandledExceptionFilter(crash_handler);
+          });
 
-        signal(SIGABRT, signal_handler);
+        prev_filter_ = SetUnhandledExceptionFilter(crash_handler);
+
+        prev_sigabrt_ = signal(SIGABRT, signal_handler);
 
         // Requires -lucrt, which can conflict with other *rt libraries, so
         // let's just comment it out. This is fine since this just silences some
@@ -4515,16 +4523,28 @@ class SignalHandling {
         //
         //_set_abort_behavior(0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
 
-        std::set_terminate(&terminator);
+        prev_terminate_ = std::set_terminate(&terminator);
 #ifndef BACKWARD_ATLEAST_CXX17
-        std::set_unexpected(&terminator);
+        prev_unexpected_ = std::set_unexpected(&terminator);
 #endif
-        _set_purecall_handler(&terminator);
-        _set_invalid_parameter_handler(&invalid_parameter_handler);
+        prev_purecall_ = _set_purecall_handler(&terminator);
+        prev_invalid_parameter_ =
+            _set_invalid_parameter_handler(&invalid_parameter_handler);
     }
     bool loaded() const { return true; }
 
     ~SignalHandling() {
+        // Restore the previous handlers first: once the reporter thread is
+        // gone, crash_handler would wait for it forever.
+        SetUnhandledExceptionFilter(prev_filter_);
+        signal(SIGABRT, prev_sigabrt_);
+        std::set_terminate(prev_terminate_);
+#ifndef BACKWARD_ATLEAST_CXX17
+        std::set_unexpected(prev_unexpected_);
+#endif
+        _set_purecall_handler(prev_purecall_);
+        _set_invalid_parameter_handler(prev_invalid_parameter_);
+
         {
             std::unique_lock<std::mutex> lk(mtx());
             crashed() = crash_status::normal_exit;
@@ -4564,6 +4584,15 @@ class SignalHandling {
     }
 
     std::thread reporter_thread_;
+
+    LPTOP_LEVEL_EXCEPTION_FILTER prev_filter_ = nullptr;
+    void (*prev_sigabrt_)(int) = nullptr;
+    std::terminate_handler prev_terminate_ = nullptr;
+#ifndef BACKWARD_ATLEAST_CXX17
+    std::unexpected_handler prev_unexpected_ = nullptr;
+#endif
+    _purecall_handler prev_purecall_ = nullptr;
+    _invalid_parameter_handler prev_invalid_parameter_ = nullptr;
 
     // TODO: how not to hardcode these?
     static const constexpr int signal_skip_recs =
