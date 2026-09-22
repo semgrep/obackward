@@ -4505,9 +4505,9 @@ class SignalHandling {
               }
               cv().notify_one();
           }) {
-        SetUnhandledExceptionFilter(crash_handler);
+        prev_filter_ = SetUnhandledExceptionFilter(crash_handler);
 
-        signal(SIGABRT, signal_handler);
+        prev_sigabrt_ = signal(SIGABRT, signal_handler);
 
         // Requires -lucrt, which can conflict with other *rt libraries, so
         // let's just comment it out. This is fine since this just silences some
@@ -4515,16 +4515,25 @@ class SignalHandling {
         //
         //_set_abort_behavior(0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
 
-        std::set_terminate(&terminator);
+        prev_terminate_ = std::set_terminate(&terminator);
 #ifndef BACKWARD_ATLEAST_CXX17
         std::set_unexpected(&terminator);
 #endif
-        _set_purecall_handler(&terminator);
-        _set_invalid_parameter_handler(&invalid_parameter_handler);
+        prev_purecall_ = _set_purecall_handler(&terminator);
+        prev_invalid_parameter_ =
+            _set_invalid_parameter_handler(&invalid_parameter_handler);
     }
     bool loaded() const { return true; }
 
     ~SignalHandling() {
+        // Restore the previous handlers first: once the reporter thread is
+        // gone, crash_handler would wait for it forever.
+        SetUnhandledExceptionFilter(prev_filter_);
+        signal(SIGABRT, prev_sigabrt_);
+        std::set_terminate(prev_terminate_);
+        _set_purecall_handler(prev_purecall_);
+        _set_invalid_parameter_handler(prev_invalid_parameter_);
+
         {
             std::unique_lock<std::mutex> lk(mtx());
             crashed() = crash_status::normal_exit;
@@ -4564,6 +4573,12 @@ class SignalHandling {
     }
 
     std::thread reporter_thread_;
+
+    LPTOP_LEVEL_EXCEPTION_FILTER prev_filter_ = nullptr;
+    void (*prev_sigabrt_)(int) = nullptr;
+    std::terminate_handler prev_terminate_ = nullptr;
+    _purecall_handler prev_purecall_ = nullptr;
+    _invalid_parameter_handler prev_invalid_parameter_ = nullptr;
 
     // TODO: how not to hardcode these?
     static const constexpr int signal_skip_recs =

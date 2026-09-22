@@ -22,10 +22,27 @@
 // backward::SignalHandling sh;
 //
 backward::SignalHandling *sh;
+
+#ifdef _WIN32
+// Join the reporter thread before ExitProcess terminates it. If it is
+// terminated mid-operation (e.g., still starting up), it can leave
+// winpthreads/libgcc state that libstdc++'s DLL_PROCESS_DETACH handler then
+// spins or aborts on, hanging the process at exit.
+static void unregister_sh() {
+    delete sh;
+    sh = nullptr;
+}
+#endif
+
 extern "C" {
 // Let's use a c interface so we can easily setup a signal handler
 bool register_sh() {
-    sh = new backward::SignalHandling();
+    if (sh == nullptr) {
+        sh = new backward::SignalHandling();
+#ifdef _WIN32
+        std::atexit(unregister_sh);
+#endif
+    }
     return sh->loaded();
 }
 }
